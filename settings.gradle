@@ -1,0 +1,2 @@
+rootProject.name='Codelab Android Sender'
+include ':app'

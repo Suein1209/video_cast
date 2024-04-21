@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
+<?xml version="1.0" encoding="utf-8"?><!--
   Copyright 2015 Google LLC. All rights reserved.
 
   Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
   -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/container"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -24,18 +24,18 @@
         android:id="@+id/videoView1"
         android:layout_width="wrap_content"
         android:layout_height="200dp"
+        android:layout_below="@+id/toolbar"
         android:layout_alignParentLeft="true"
         android:layout_alignParentRight="true"
-        android:layout_below="@+id/toolbar"
         android:layout_centerInParent="true" />
 
     <RelativeLayout
-        android:layout_alignBottom="@+id/videoView1"
-        android:layout_alignLeft="@+id/videoView1"
-        android:layout_alignRight="@+id/videoView1"
-        android:layout_alignTop="@+id/videoView1"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/videoView1"
+        android:layout_alignTop="@+id/videoView1"
+        android:layout_alignRight="@+id/videoView1"
+        android:layout_alignBottom="@+id/videoView1">
 
         <com.android.volley.toolbox.NetworkImageView
             android:id="@+id/coverArtView"
@@ -46,11 +46,11 @@
 
         <ImageButton
             android:id="@+id/play_circle"
-            android:src="@drawable/ic_play_circle_white_80dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_centerInParent="true"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:src="@drawable/ic_play_circle_white_80dp" />
 
     </RelativeLayout>
 
@@ -58,28 +58,30 @@
         android:id="@+id/controllers"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignBottom="@+id/videoView1"
         android:layout_alignLeft="@+id/videoView1"
-        android:layout_alignRight="@+id/videoView1"
         android:layout_alignTop="@+id/videoView1"
+        android:layout_alignRight="@+id/videoView1"
+        android:layout_alignBottom="@+id/videoView1"
+        android:background="@drawable/player_bg_gradient_dark"
         android:visibility="visible"
-        android:background="@drawable/player_bg_gradient_dark" >
+        tools:visibility="visible">
 
         <ProgressBar
-                android:id="@+id/progressBar1"
-                style="?android:attr/progressBarStyleLarge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_centerInParent="true"
-                android:visibility="gone"
-                android:progressTint="@color/primary"
-                android:thumbTint="@color/primary"/>
+            android:id="@+id/progressBar1"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:progressTint="@color/primary"
+            android:thumbTint="@color/primary"
+            android:visibility="gone"
+            tools:visibility="visible" />
 
         <RelativeLayout
             android:id="@+id/control_bar"
             android:layout_width="fill_parent"
             android:layout_height="45dp"
-            android:layout_alignParentBottom="true" >
+            android:layout_alignParentBottom="true">
 
             <ImageView
                 android:id="@+id/imageView2"
@@ -127,11 +129,11 @@
         android:id="@+id/textView1"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentLeft="true"
         android:layout_below="@+id/videoView1"
+        android:layout_alignParentLeft="true"
         android:layout_marginLeft="16dp"
-        android:layout_marginRight="16dp"
         android:layout_marginTop="10dp"
+        android:layout_marginRight="16dp"
         android:textSize="18sp"
         android:textStyle="bold" />
 
@@ -139,9 +141,9 @@
         android:id="@+id/textView3"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
+        android:layout_below="@+id/textView1"
         android:layout_alignLeft="@+id/textView1"
         android:layout_alignRight="@+id/textView1"
-        android:layout_below="@+id/textView1"
         android:layout_marginTop="2dp"
         android:lines="1"
         android:textSize="15sp" />
@@ -150,12 +152,12 @@
         android:id="@+id/textView2"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
+        android:layout_below="@+id/textView3"
         android:layout_alignLeft="@+id/textView1"
         android:layout_alignRight="@+id/textView1"
-        android:layout_below="@+id/textView3"
-        android:layout_marginBottom="5dp"
+        android:layout_alignParentBottom="true"
         android:layout_marginTop="10dp"
+        android:layout_marginBottom="5dp"
         android:fontFamily="sans-serif-light"
         android:lines="50"
         android:scrollbars="vertical"
@@ -163,11 +165,11 @@
 
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
-        android:layout_height="wrap_content"
         android:layout_width="match_parent"
-        android:minHeight="?attr/actionBarSize"
+        android:layout_height="wrap_content"
         android:background="?attr/colorPrimary"
-        app:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
-        app:popupTheme="@style/ThemeOverlay.AppCompat.Light"/>
+        android:minHeight="?attr/actionBarSize"
+        app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+        app:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar" />
 
 </RelativeLayout>

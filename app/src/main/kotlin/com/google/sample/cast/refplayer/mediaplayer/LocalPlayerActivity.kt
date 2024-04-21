@@ -15,38 +15,42 @@
  */
 package com.google.sample.cast.refplayer.mediaplayer
 
-import com.google.sample.cast.refplayer.utils.MediaItem.Companion.fromBundle
-import com.google.sample.cast.refplayer.utils.CustomVolleyRequest.Companion.getInstance
-import com.google.sample.cast.refplayer.utils.Utils.isOrientationPortrait
-import com.google.sample.cast.refplayer.utils.Utils.showErrorDialog
-import com.google.sample.cast.refplayer.utils.Utils.formatMillis
-import com.google.sample.cast.refplayer.utils.Utils.getDisplaySize
-import androidx.appcompat.app.AppCompatActivity
-import com.android.volley.toolbox.NetworkImageView
-import android.os.Bundle
-import com.google.sample.cast.refplayer.R
-import android.widget.SeekBar.OnSeekBarChangeListener
 import android.annotation.SuppressLint
-import android.os.Build
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Point
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.os.Looper
-import com.google.sample.cast.refplayer.settings.CastPreference
-import androidx.core.app.ActivityCompat
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.*
 import android.widget.*
+import android.widget.SeekBar.OnSeekBarChangeListener
+import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.app.ActivityCompat
 import androidx.core.view.ViewCompat
 import com.android.volley.toolbox.ImageLoader
+import com.android.volley.toolbox.NetworkImageView
+import com.google.android.gms.cast.MediaInfo
+import com.google.android.gms.cast.MediaLoadRequestData
+import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
+import com.google.android.gms.common.images.WebImage
+import com.google.sample.cast.refplayer.R
+import com.google.sample.cast.refplayer.settings.CastPreference
+import com.google.sample.cast.refplayer.utils.CustomVolleyRequest.Companion.getInstance
 import com.google.sample.cast.refplayer.utils.MediaItem
+import com.google.sample.cast.refplayer.utils.MediaItem.Companion.fromBundle
+import com.google.sample.cast.refplayer.utils.Utils.formatMillis
+import com.google.sample.cast.refplayer.utils.Utils.getDisplaySize
+import com.google.sample.cast.refplayer.utils.Utils.isOrientationPortrait
+import com.google.sample.cast.refplayer.utils.Utils.showErrorDialog
 import java.util.*
 
 /**
@@ -76,6 +80,8 @@ class LocalPlayerActivity : AppCompatActivity() {
      * 1단계는 한 객체를 다른 객체에 매핑하는 것입니다.
      * MediaInfo는 Cast 프레임워크가 이해할 수 있는 내용이고 MediaItem은 미디어 항목에 관한 앱의 캡슐화입니다.
      * 따라서 MediaItem을 MediaInfo에 쉽게 매핑할 수 있습니다.
+     *
+     * 넘겨진 미디어 정보가 들어있다.
      */
     private var mSelectedMedia: MediaItem? = null
     private var mControllersVisible = false
@@ -111,11 +117,12 @@ class LocalPlayerActivity : AppCompatActivity() {
          *
          * 현재 활성 세션에는 SessionManager.getCurrentSession()으로 액세스할 수 있습니다. 세션은 사용자의 Cast 대화상자 상호작용에 반응하여 자동으로 생성되고 해제됩니다.
          */
-        mCastSession = mCastContext!!.sessionManager.currentCastSession
+        mCastSession = mCastContext!!.sessionManager.currentCastSession // 현재 세션을 가져온다.
 
-        setupCastListener()
+        setupCastListener() // 세션 리스너를 생성한다.
 
-        loadViews()
+        loadViews() // 그냥 layout xml 매핑
+
         setupControlsCallbacks()
         // see what we need to play and where
         val bundle = intent.extras
@@ -148,8 +155,20 @@ class LocalPlayerActivity : AppCompatActivity() {
                 // we should load the video but pause it
                 // and show the album art.
 //                updatePlaybackLocation(PlaybackLocation.LOCAL)
-                mPlaybackState = PlaybackState.IDLE
-                updatePlayButton(mPlaybackState)
+                /**
+                 * 보이는거
+                 * - 재생 버튼
+                 *
+                 * 안보이는거
+                 * - 컨트롤러
+                 * - 아트커버
+                 * - 비디오
+                 *
+                 * 즉, 재생 버튼만 보인다.
+                 * 연결은 되어 있으니, 미디어는 멈춘 상태로 두는거
+                 */
+                mPlaybackState = PlaybackState.IDLE // 우선 멈춤으로 설정?
+                updatePlayButton(mPlaybackState) //idle 로 버튼 업데이트
             }
         }
         if (mTitleView != null) {
@@ -157,8 +176,48 @@ class LocalPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * RemoteMediaClient로 영상을 로드 한다.
+     * 즉, TV로 영상을 전송한다.
+     *   이건 Cast Session 이 이미 설정되어 있을때 가능하다.
+     */
     private fun loadRemoteMedia(position: Int, autoPlay: Boolean) {
+        if (mCastSession == null) return
+        val remoteMediaClient = mCastSession?.remoteMediaClient ?: return
+        remoteMediaClient.load(
+            MediaLoadRequestData.Builder()
+                .setMediaInfo(buildMediaInfo())
+                .setAutoplay(autoPlay)
+                .setCurrentTime(position.toLong()) // 시작하는 영상의 위치? Progress
+                .build()
+        )
+    }
 
+    /**
+     * 메타 정보 인스턴스를 반환한다.
+     *
+     * 정보 내용
+     * - 타이틀이 무언가
+     * - 서브 타이틀이 무언가
+     * - 커버 이미지 2개?(왜 2개인지는 모름)
+     * - 스트리밍 타입이 어떤가?(여기서는 버퍼드 타입, LIVE 타입도 있긴하다)
+     * - 컨텐츠의 타입이 어떤가?(여긴 mp4)
+     * - 영상의 길이가 어떤가
+     */
+    private fun buildMediaInfo(): MediaInfo? {
+        val movieMetadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
+        mSelectedMedia?.studio?.let { movieMetadata.putString(MediaMetadata.KEY_SUBTITLE, it) }
+        mSelectedMedia?.title?.let { movieMetadata.putString(MediaMetadata.KEY_TITLE, it) }
+        movieMetadata.addImage(WebImage(Uri.parse(mSelectedMedia!!.getImage(0))))
+        movieMetadata.addImage(WebImage(Uri.parse(mSelectedMedia!!.getImage(1))))
+        return mSelectedMedia!!.url?.let {
+            MediaInfo.Builder(it)
+                .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED) // 버퍼드 타입, LIVE 타입도 있다.
+                .setContentType("videos/mp4") // 컨텐츠 타입 설정
+                .setMetadata(movieMetadata) // 메타 데이터 설정
+                .setStreamDuration((mSelectedMedia!!.duration * 1000).toLong())
+                .build()
+        }
     }
 
     /**
@@ -166,25 +225,28 @@ class LocalPlayerActivity : AppCompatActivity() {
      * 미디어 제어 채널은 Cast 프레임워크가 수신기 미디어 플레이어에서 메시지를 주고받는 방법입니다.
      * 사용자가 전송 버튼에서 기기를 선택하면 전송 세션이 자동으로 시작되고 사용자 연결 해제 시 자동으로 중지됩니다.
      * 네트워크 문제로 인해 수신기 세션에 다시 연결하는 작업도 Cast SDK에서 자동으로 처리됩니다.
+     *
+     * 로컬에서 세션 리스너를 추가한다.
      */
     private var mSessionManagerListener: SessionManagerListener<CastSession>? = null
     private var mCastSession: CastSession? = null
     private fun setupCastListener() {
+        //세션 리스너 생성
         mSessionManagerListener = object : SessionManagerListener<CastSession> {
             override fun onSessionEnded(p0: CastSession, p1: Int) {
-                onApplicationDisconnected()
+                onApplicationDisconnected() // 세션이 끝나면 disconnect
             }
 
             override fun onSessionResumed(p0: CastSession, p1: Boolean) {
-                onApplicationConnected(p0)
+                onApplicationConnected(p0) // 세션이 시작하면 다시 연결
             }
 
             override fun onSessionStartFailed(p0: CastSession, p1: Int) {
-                onApplicationDisconnected()
+                onApplicationDisconnected() // 세션이 끝나면 disconnect
             }
 
             override fun onSessionStarted(p0: CastSession, p1: String) {
-                onApplicationConnected(p0)
+                onApplicationConnected(p0)// 세션이 시작하면 연결
             }
 
             override fun onSessionResuming(p0: CastSession, p1: String) {}
@@ -194,107 +256,152 @@ class LocalPlayerActivity : AppCompatActivity() {
             override fun onSessionSuspended(p0: CastSession, p1: Int) {}
 
             private fun onApplicationConnected(castSession: CastSession) {
-                mCastSession = castSession // 연결된 세션을 반환?
-                if (null != mSelectedMedia) {
-                    if (mPlaybackState == PlaybackState.PLAYING) {
-                        mVideoView!!.pause()
-//                        loadRemoteMedia(mSeekbar!!.progress, true)
+                //만약 연결이 되었다면!
+                mCastSession = castSession // 연결된 세션을 설정
+                if (null != mSelectedMedia) { // 넘어온 미디어 정보 확인
+                    if (mPlaybackState == PlaybackState.PLAYING) { // 만약 Play 중이라면
+                        mVideoView!!.pause() // 비디오를 멈춘다.(연결되었으니 폰에서는 보이지 않도록 하는거)
+                        loadRemoteMedia(mSeekbar!!.progress, true)
                         return
                     } else {
+                        //만약 Play 중이 아니라면 버퍼링 중이겠지?
                         mPlaybackState = PlaybackState.IDLE // 현재 로컬에서 재생되는걸 멈추고
                         updatePlaybackLocation(PlaybackLocation.REMOTE) // 리모트로 설정한다
                     }
                 }
-                updatePlayButton(mPlaybackState)
-                invalidateOptionsMenu()
+                updatePlayButton(mPlaybackState) // Playback 상태에 따라서 컨트롤 버튼을 상태 업데이트 하고
+                invalidateOptionsMenu() // 메뉴 업데이트
             }
 
             private fun onApplicationDisconnected() {
-                updatePlaybackLocation(PlaybackLocation.LOCAL)
-                mPlaybackState = PlaybackState.IDLE
-                mLocation = PlaybackLocation.LOCAL
-                updatePlayButton(mPlaybackState)
-                invalidateOptionsMenu()
+                updatePlaybackLocation(PlaybackLocation.LOCAL) // 커버랑, 컨트롤러 노출여부 설정 / 로컬이면 재생 여부에 따라 커버랑 컨트롤러 제어
+                mPlaybackState = PlaybackState.IDLE // State 는 Idle 로... 아마도 멈춤?
+                mLocation = PlaybackLocation.LOCAL // location 은 로컬로 (끊겼으니 TV에서는 안보이고 폰에서 재생하는 거니깐)
+                updatePlayButton(mPlaybackState) // 재생 상태에 따라서 컨트롤러 버튼설정
+                invalidateOptionsMenu() // 메뉴 업데이트
             }
         }
     }
 
 
+    /**
+     * 로컬
+     * -- 재생중 일때 커버 아트 없애고, 타이머 시작
+     * -- 멈춰있을 때 커버 아트 설정하고, 타이머 멈춤
+     *
+     * 리모트
+     * -- 커버아트를 씌운다. / 타이머를 멈추고 컨트롤러를 보이지 않도록 한다.
+     */
     private fun updatePlaybackLocation(location: PlaybackLocation) {
         mLocation = location
         if (location == PlaybackLocation.LOCAL) {
             if (mPlaybackState == PlaybackState.PLAYING
                 || mPlaybackState == PlaybackState.BUFFERING
             ) {
-                setCoverArtStatus(null)
+                //playback 상태가 재생중이거나 버퍼링 상태면
+                setCoverArtStatus(null) //로컬의 아트커버 update
                 startControllersTimer()
             } else {
-                stopControllersTimer()
-                setCoverArtStatus(mSelectedMedia!!.getImage(0))
+                //playback이 멈춰져 있는 상태이면
+                stopControllersTimer() //타이머를 멈춘다. 즉, 컨트롤러 계속 보이게함
+                setCoverArtStatus(mSelectedMedia!!.getImage(0)) // 아트커버를 selected media 에서 가져온다?
             }
         } else {
-            stopControllersTimer() // 리모트라면 로컬 영상을 멈추고
+            stopControllersTimer() //타이머를 멈춘다. 즉, 컨트롤러 계속 보이게함
             setCoverArtStatus(mSelectedMedia!!.getImage(0)) //커버를 씌우고
             updateControllersVisibility(false) //컨트롤러를 안보이게 한다.
         }
     }
 
+    /**
+     * 모바일에서 seek bar 를 이동하고 action up 했을때 호출된다.
+     */
     private fun play(position: Int) {
+        //말이 스타트 컨트롤이고 만약 리모트이면 그냥 timer cancel 만 하고 만다.
         startControllersTimer()
         when (mLocation) {
             PlaybackLocation.LOCAL -> {
+                //로컬에서는 바로 video view 에 seek 포지셔을 설정해서 재생한다.
                 mVideoView!!.seekTo(position)
                 mVideoView!!.start()
             }
 
             PlaybackLocation.REMOTE -> {
+                //리모트 일경우 UI를 버퍼링 상태로 우선 바꾼다.
                 mPlaybackState = PlaybackState.BUFFERING
+
+                /**
+                 * BUFFERING 상태
+                 * - 컨트롤의 재생 상태 Pause 버튼 비노출
+                 * - 로딩 프로그래스 노출
+                 */
                 updatePlayButton(mPlaybackState)
+
+                //리모트 컨트롤 클라이언트로 Seek 포지션을 새로 설정한다. 그러면 resume 으로 들어오나?
+                mCastSession!!.remoteMediaClient?.seek(position.toLong())
             }
 
             else -> {}
         }
+
+        //Seek Bar Ui 업데이트 timer 를 시작한다.
         restartTrickplayTimer()
     }
 
+    /**
+     * 하단 재생 상태 버튼에서 클릭 됐을때
+     * 그리고 가운데 재생 상태 버튼을 클릭했을때 호출된다.
+     *
+     * - 두 군데서 클릭의 toggle 을 설정한다.
+     */
     private fun togglePlayback() {
-        stopControllersTimer()
+        stopControllersTimer() // 컨트롤 5초뒤 비노출하는 타이머 멈춤
         when (mPlaybackState) {
             PlaybackState.PAUSED -> when (mLocation) {
+                //만약 Pause 를 눌렀다면 즉, 재생 하라는 뜻
                 PlaybackLocation.LOCAL -> {
-                    mVideoView!!.start()
+                    mVideoView!!.start() //비디오 재생하고
                     Log.d(TAG, "Playing locally...")
-                    mPlaybackState = PlaybackState.PLAYING
-                    startControllersTimer()
-                    restartTrickplayTimer()
-                    updatePlaybackLocation(PlaybackLocation.LOCAL)
+                    mPlaybackState = PlaybackState.PLAYING //state Playing 으로 바꾸고
+                    startControllersTimer() //컨트롤 타이머 다시 시작하고
+                    restartTrickplayTimer() // 시크바 UI 업데이트 타이머 시작하고
+                    updatePlaybackLocation(PlaybackLocation.LOCAL) // location 로컬로 설정하고
                 }
 
-                PlaybackLocation.REMOTE -> finish()
+                PlaybackLocation.REMOTE -> finish() // 리모트 일경우 그냥 화면 finish ???
                 else -> {}
             }
 
             PlaybackState.PLAYING -> {
-                mPlaybackState = PlaybackState.PAUSED
-                mVideoView!!.pause()
+                //현재 재생에서 눌렀다면, 즉 pause 시켜라!
+                mPlaybackState = PlaybackState.PAUSED // 상태 바꾸고
+                mVideoView!!.pause() // video view 멈추고... 이래도 cast session 의 비디오도 멈추나?
             }
 
             PlaybackState.IDLE -> when (mLocation) {
+                //IDLE 상태라면?, 즉, 비디오 설정이 안된상태에서 재생 버튼을 눌렀다면!, 재생하라는 뜻이다.
                 PlaybackLocation.LOCAL -> {
-                    mVideoView!!.setVideoURI(Uri.parse(mSelectedMedia!!.url))
-                    mVideoView!!.seekTo(0)
-                    mVideoView!!.start()
-                    mPlaybackState = PlaybackState.PLAYING
-                    restartTrickplayTimer()
-                    updatePlaybackLocation(PlaybackLocation.LOCAL)
+                    mVideoView!!.setVideoURI(Uri.parse(mSelectedMedia!!.url)) // URI 설정
+                    mVideoView!!.seekTo(0) // Seekbar 처음으로 이동
+                    mVideoView!!.start() // 영상 재생
+                    mPlaybackState = PlaybackState.PLAYING // 상태 재생중으로 바꾸고
+                    restartTrickplayTimer() //시크바 UI 업데이트 시작
+                    updatePlaybackLocation(PlaybackLocation.LOCAL) //그리고 로컬로 설정
                 }
 
-                PlaybackLocation.REMOTE -> {}
+                PlaybackLocation.REMOTE -> {
+                    if (mCastSession != null && mCastSession!!.isConnected) {
+                        //cast session이 연결되어 있다면
+                        loadRemoteMedia(mSeekbar!!.progress, true) // 영상을 로딩한다.
+                    }
+                }
                 else -> {}
             }
 
             else -> {}
         }
+
+        //컨트롤 버튼들 설정()
         updatePlayButton(mPlaybackState)
     }
 
@@ -302,16 +409,25 @@ class LocalPlayerActivity : AppCompatActivity() {
         if (url != null) {
             val mImageLoader = getInstance(this.applicationContext)
                 ?.imageLoader
+
+            //아크커버 이미지를 다운 받고
             mImageLoader?.get(url, ImageLoader.getImageListener(mCoverArt, 0, 0))
+            //커버 ImageView에 설정한다.
             mCoverArt!!.setImageUrl(url, mImageLoader)
+            //아트커버를 노출시키고
             mCoverArt!!.visibility = View.VISIBLE
+            //Play되고 있는 VideoView를 비노출시킨다.
             mVideoView!!.visibility = View.INVISIBLE
         } else {
+            //URL이 문제가 있다면 아트커버 없애고, VideoView 를 노출
             mCoverArt!!.visibility = View.GONE
             mVideoView!!.visibility = View.VISIBLE
         }
     }
 
+    /**
+     * seek ui update timer 정지
+     */
     private fun stopTrickplayTimer() {
         Log.d(TAG, "Stopped TrickPlay Timer")
         if (mSeekbarTimer != null) {
@@ -319,6 +435,9 @@ class LocalPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * seek ui update timer 재 시작
+     */
     private fun restartTrickplayTimer() {
         stopTrickplayTimer()
         mSeekbarTimer = Timer()
@@ -332,27 +451,32 @@ class LocalPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 하단 컨트롤러가 5초 뒤에 사라지게 하는 Timer 를 시작한다.
+     * - 만약 리모트이면 그냥 Timer 만 캔슬하고 만다.
+     */
     private fun startControllersTimer() {
         if (mControllersTimer != null) {
-            mControllersTimer!!.cancel()
+            mControllersTimer!!.cancel() // 우선 타이머 멈추고
         }
         if (mLocation == PlaybackLocation.REMOTE) {
+            //현재 리모트 이면 타이머는 무시
             return
         }
         mControllersTimer = Timer()
-        mControllersTimer!!.schedule(HideControllersTask(), 5000)
+        mControllersTimer!!.schedule(HideControllersTask(), 5000) // 5초뒤에 컨트롤러를 안보이도록 한다.
     }
 
     // should be called from the main thread
     private fun updateControllersVisibility(show: Boolean) {
         if (show) {
-            supportActionBar!!.show()
-            mControllers!!.visibility = View.VISIBLE
+            supportActionBar!!.show() //action bar 보이고
+            mControllers!!.visibility = View.VISIBLE // 컨트롤러를 보이게 한다.
         } else {
-            if (!isOrientationPortrait(this)) {
-                supportActionBar!!.hide()
+            if (!isOrientationPortrait(this)) { // 가로 모드라면
+                supportActionBar!!.hide() // action bar를 보이지 않도록 한다.
             }
-            mControllers!!.visibility = View.INVISIBLE
+            mControllers!!.visibility = View.INVISIBLE // 컨트롤러를 보이지 않게 한다.
         }
     }
 
@@ -373,6 +497,9 @@ class LocalPlayerActivity : AppCompatActivity() {
             mPlaybackState = PlaybackState.PAUSED
             updatePlayButton(PlaybackState.PAUSED)
         }
+
+        mCastContext!!.sessionManager.removeSessionManagerListener(
+            mSessionManagerListener!!, CastSession::class.java)
     }
 
     override fun onStop() {
@@ -394,19 +521,34 @@ class LocalPlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         Log.d(TAG, "onResume() was called")
-        updatePlaybackLocation(PlaybackLocation.LOCAL)
+
+        //캐스팅 session listener 를 추가한다. 연결이라고 해야하나
+        mCastContext!!.sessionManager.addSessionManagerListener(mSessionManagerListener!!, CastSession::class.java)
+
+        //세션이 이미 연결되어 있다면
+        if (mCastSession != null && mCastSession!!.isConnected) {
+            updatePlaybackLocation(PlaybackLocation.REMOTE) // 케이션을 원격으로 설정한다.
+        } else {
+            updatePlaybackLocation(PlaybackLocation.LOCAL) // 로컬은 당연히 로컬
+        }
         super.onResume()
     }
 
+    /**
+     * delay 시간 뒤에 안보이도록 한다. 컨트롤러를
+     */
     private inner class HideControllersTask : TimerTask() {
         override fun run() {
             looper.thread.join().apply {
-                updateControllersVisibility(false)
+                updateControllersVisibility(false) //컨트롤러를 보이지 않도록 한다?
                 mControllersVisible = false
             }
         }
     }
 
+    /**
+     * 몇초 단위로 Seek bar ui 를 업데이트 하기 위한 Timer
+     */
     private inner class UpdateSeekbarTask : TimerTask() {
         override fun run() {
             looper.thread.join().apply {
@@ -460,17 +602,27 @@ class LocalPlayerActivity : AppCompatActivity() {
         }
         mSeekbar!!.setOnSeekBarChangeListener(object : OnSeekBarChangeListener {
             override fun onStopTrackingTouch(seekBar: SeekBar) {
+                //Seek bar 에서 손을 떼었을때
                 if (mPlaybackState == PlaybackState.PLAYING) {
-                    play(seekBar.progress)
+                    play(seekBar.progress) // 플레이 중이라면 로컬이든 리모트이든 seek position 을 재 설정한다.
                 } else if (mPlaybackState != PlaybackState.IDLE) {
-                    mVideoView!!.seekTo(seekBar.progress)
+                    mVideoView!!.seekTo(seekBar.progress) // IDLE 이면 로컬 영상에만 seek position 을 설정한다.
                 }
+
+                //하단 컨트롤러 5초뒤에 사라지게 하는 Timer 시작 / 리모트일 경우 타이머만 캔슬한다.
                 startControllersTimer()
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar) {
+                //Seek bar 에서 손을 눌렀을때
+
+                //Seek bar 에 주기적으로 seek position update 하던 타이머 멈춤
                 stopTrickplayTimer()
+
+                //로컬 비디어 영상 멈춤
                 mVideoView!!.pause()
+
+                //하단 컨트롤러 5초뒤에 사라지게 하는 Timer 정지 / 리모트일 경우 타이머만 캔슬한다.
                 stopControllersTimer()
             }
 
@@ -478,9 +630,14 @@ class LocalPlayerActivity : AppCompatActivity() {
                 seekBar: SeekBar, progress: Int,
                 fromUser: Boolean
             ) {
+                // Seek bar를 사용자가 이동주
+
+                //이때는 그냥 seek bar 위치만 textview 에 업데이트 한다.
                 mStartText!!.text = formatMillis(progress)
             }
         })
+
+        //하단 컨트롤 재생 상태 버튼 클릭시
         mPlayPause!!.setOnClickListener {
             if (mLocation == PlaybackLocation.LOCAL) {
                 togglePlayback()
@@ -495,9 +652,33 @@ class LocalPlayerActivity : AppCompatActivity() {
         mEndText!!.text = formatMillis(duration)
     }
 
+    /**
+     * 컨트롤 버튼들 설정(하단, 가운데 모두 포함이다.)
+     *
+     * PLAYING 상태
+     * - 로딩 프로그래스 비노출
+     * - 컨트롤의 재생 상태 Pause 버튼 노출
+     * - 가운데 Play 버튼 연결 여부에 따라서 노출 혹은 비노출
+     *
+     * PAUSED 상태
+     * - 로딩 프로그래스 비노출
+     * - 컨트롤의 재생 상태 Play 버튼 노출
+     * - 가운데 Play 버튼 연결 여부에 따라서 노출 혹은 비노출
+     *
+     * IDLE 상태
+     * - Play 버튼 노출
+     * - 커버아트 노출
+     * - 컨트롤 버튼 비노출
+     * - 로컬 VideoView 비노출
+     *
+     * BUFFERING 상태
+     * - 컨트롤의 재생 상태 Pause 버튼 비노출
+     * - 로딩 프로그래스 노출
+     */
     private fun updatePlayButton(state: PlaybackState?) {
         Log.d(TAG, "Controls: PlayBackState: $state")
-        val isConnected = false
+        val isConnected = (mCastSession != null
+                && (mCastSession!!.isConnected || mCastSession!!.isConnecting))
         mControllers!!.visibility = if (isConnected) View.GONE else View.VISIBLE
         mPlayCircle!!.visibility = if (isConnected) View.GONE else View.VISIBLE
         when (state) {
